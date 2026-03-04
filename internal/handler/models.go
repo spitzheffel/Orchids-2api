@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	apperrors "orchids-api/internal/errors"
-	"orchids-api/internal/grok"
 )
 
 type PublicModelResponse struct {
@@ -19,6 +18,34 @@ type PublicModelResponse struct {
 type PublicModelsListResponse struct {
 	Object string                `json:"object"`
 	Data   []PublicModelResponse `json:"data"`
+}
+
+var grok2apiModelAllowlist = map[string]struct{}{
+	"grok-3":                 {},
+	"grok-3-mini":            {},
+	"grok-3-thinking":        {},
+	"grok-4":                 {},
+	"grok-4-mini":            {},
+	"grok-4-thinking":        {},
+	"grok-4-heavy":           {},
+	"grok-4.1-mini":          {},
+	"grok-4.1-fast":          {},
+	"grok-4.1-expert":        {},
+	"grok-4.1-thinking":      {},
+	"grok-4.20-beta":         {},
+	"grok-imagine-1.0":       {},
+	"grok-imagine-1.0-fast":  {},
+	"grok-imagine-1.0-edit":  {},
+	"grok-imagine-1.0-video": {},
+}
+
+func isGrok2APISupportedModelID(modelID string) bool {
+	id := strings.ToLower(strings.TrimSpace(modelID))
+	if id == "" {
+		return false
+	}
+	_, ok := grok2apiModelAllowlist[id]
+	return ok
 }
 
 func (h *Handler) HandleModels(w http.ResponseWriter, r *http.Request) {
@@ -49,8 +76,7 @@ func (h *Handler) HandleModels(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(mChannel) == "" {
 			mChannel = "orchids" // Default assumption
 		}
-
-		if strings.EqualFold(mChannel, "grok") && !grok.IsSupportedModelID(m.ModelID) {
+		if strings.EqualFold(mChannel, "grok") && !isGrok2APISupportedModelID(m.ModelID) {
 			continue
 		}
 
