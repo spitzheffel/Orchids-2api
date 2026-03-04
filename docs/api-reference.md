@@ -74,9 +74,9 @@
 
 请求体通用字段：
 
-- `account_type`: `orchids` / `warp` / `grok`
-- `agent_mode`: 可选，不填时后端按账号类型兜底
-- `enabled`、`weight`: 可选
+- `account_type`：`orchids` / `warp` / `grok`（固定小写）
+- `agent_mode`：可选；不填时后端按账号类型兜底（例如 Orchids 默认 `claude-sonnet-4-5`，Warp 默认 `auto`，Grok 默认 `grok-3`）
+- `enabled`、`weight`：可选
 
 按账号类型的凭证字段：
 
@@ -94,7 +94,7 @@
      ```
 
 2. **Warp**
-   - 使用 `refresh_token`（`client_cookie` 也会在导入时兼容转为 `refresh_token`）
+   - 推荐使用 `refresh_token`（历史导入场景下若传 `client_cookie`，后端会兼容转为 `refresh_token`）
    - 示例：
      ```json
      {"account_type":"warp","refresh_token":"warp_refresh_token_xxx"}
