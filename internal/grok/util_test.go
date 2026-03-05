@@ -208,3 +208,32 @@ func BenchmarkStripToolAndRenderMarkup(b *testing.B) {
 		_ = stripToolAndRenderMarkup(in)
 	}
 }
+
+func BenchmarkParseRateLimitPayload_Nested(b *testing.B) {
+	payload := map[string]interface{}{
+		"quota": map[string]interface{}{
+			"kind": "daily",
+		},
+		"limits": map[string]interface{}{
+			"maxQueries":       140,
+			"remainingQueries": 23,
+			"resetAt":          "2026-03-05T19:00:00Z",
+		},
+		"meta": []interface{}{
+			map[string]interface{}{"k": "v"},
+			map[string]interface{}{"unused": 1},
+		},
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = parseRateLimitPayload(payload)
+	}
+}
+
+func BenchmarkParseRateLimitValue_CompoundHeader(b *testing.B) {
+	raw := "100;w=3600"
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = parseRateLimitValue(raw)
+	}
+}
