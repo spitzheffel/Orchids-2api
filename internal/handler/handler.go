@@ -449,9 +449,15 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 		gateNoTools = true
 	}
 	if lastUserIsToolResultOnly(req.Messages) {
-		gateNoTools = true
-		if h.config.DebugEnabled {
-			slog.Debug("tool_gate: disabled tools for tool_result-only follow-up")
+		if isWarpRequest && shouldKeepToolsForWarpToolResultFollowup(req.Messages) {
+			if h.config.DebugEnabled {
+				slog.Debug("tool_gate: keeping tools for warp exploratory tool_result follow-up")
+			}
+		} else {
+			gateNoTools = true
+			if h.config.DebugEnabled {
+				slog.Debug("tool_gate: disabled tools for tool_result-only follow-up")
+			}
 		}
 	}
 	effectiveTools := req.Tools
