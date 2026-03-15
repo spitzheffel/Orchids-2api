@@ -234,9 +234,26 @@ func emitOrchidsModelEvent(
 		return false
 	}
 
+	if usage, ok := normalized["usage"].(map[string]interface{}); ok {
+		recordOrchidsUsage(state, usage)
+	}
+
+	if eventType == "finish" {
+		if finishReason, ok := normalized["finishReason"].(string); ok {
+			state.finishReason = strings.TrimSpace(finishReason)
+		}
+		if state.stream {
+			emitOrchidsCompletionTail(state, onMessage)
+			return true
+		}
+	}
+
 	applyOrchidsModelState(state, eventType)
 
 	onMessage(upstream.SSEMessage{Type: "model", Event: normalized, Raw: raw})
+	if eventType == "finish" {
+		state.finishSent = true
+	}
 
 	return eventType == "finish"
 }

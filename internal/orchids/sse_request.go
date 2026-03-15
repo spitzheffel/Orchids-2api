@@ -143,9 +143,13 @@ func (c *Client) streamSSEBody(
 	reader := perf.AcquireBufioReader(body)
 	defer perf.ReleaseBufioReader(reader)
 
-	var state requestState
+	state := newOrchidsRequestState(req)
 	var fsWG sync.WaitGroup
 	var lineScratch []byte
+
+	if state.stream {
+		emitOrchidsMessageStart(&state, onMessage)
+	}
 
 	for {
 		select {

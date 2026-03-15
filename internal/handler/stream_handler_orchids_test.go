@@ -540,3 +540,140 @@ func TestDirectFinalThinkingBlocksRespectSuppressThinking(t *testing.T) {
 		t.Fatalf("expected message_stop after finish, got: %s", body)
 	}
 }
+
+func TestDirectFinalToolUseBlocksRespectValidation(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	h := newStreamHandler(
+		&config.Config{OutputTokenMode: "final"},
+		rec,
+		debug.New(false, false),
+		false,
+		true,
+		adapter.FormatAnthropic,
+		"",
+	)
+	defer h.release()
+
+	h.handleMessage(upstream.SSEMessage{
+		Type: "content_block_start",
+		Event: map[string]interface{}{
+			"type":  "content_block_start",
+			"index": 1,
+			"content_block": map[string]interface{}{
+				"type":  "tool_use",
+				"id":    "toolu_write_1",
+				"name":  "Write",
+				"input": map[string]interface{}{},
+			},
+		},
+	})
+	h.handleMessage(upstream.SSEMessage{
+		Type: "content_block_delta",
+		Event: map[string]interface{}{
+			"type":  "content_block_delta",
+			"index": 1,
+			"delta": map[string]interface{}{
+				"type":         "input_json_delta",
+				"partial_json": `{"file_path":"/tmp/demo.txt","content":"hello"}`,
+			},
+		},
+	})
+	h.handleMessage(upstream.SSEMessage{
+		Type: "content_block_stop",
+		Event: map[string]interface{}{
+			"type":  "content_block_stop",
+			"index": 1,
+		},
+	})
+	h.handleMessage(upstream.SSEMessage{
+		Type: "model",
+		Event: map[string]interface{}{
+			"type":         "finish",
+			"finishReason": "tool_use",
+		},
+	})
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"type":"tool_use"`) {
+		t.Fatalf("expected validated tool_use block, got: %s", body)
+	}
+	if !strings.Contains(body, `"name":"Write"`) {
+		t.Fatalf("expected Write tool name, got: %s", body)
+	}
+	if !strings.Contains(body, `"partial_json":"{\"file_path\":\"/tmp/demo.txt\",\"content\":\"hello\"}"`) {
+		t.Fatalf("expected input_json_delta in emitted tool_use block, got: %s", body)
+	}
+	if !strings.Contains(body, `"stop_reason":"tool_use"`) {
+		t.Fatalf("expected stop_reason tool_use, got: %s", body)
+	}
+}
+
+func TestDirectFinalToolUseBlocksPassThroughWithoutAllowedToolFiltering(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	h := newStreamHandler(
+		&config.Config{OutputTokenMode: "final"},
+		rec,
+		debug.New(false, false),
+		false,
+		true,
+		adapter.FormatAnthropic,
+		"",
+	)
+	defer h.release()
+	h.setAllowedToolNames([]string{"Read"})
+	h.setSuppressEmptyOutputFallback(true)
+
+	h.handleMessage(upstream.SSEMessage{
+		Type: "content_block_start",
+		Event: map[string]interface{}{
+			"type":  "content_block_start",
+			"index": 0,
+			"content_block": map[string]interface{}{
+				"type":  "tool_use",
+				"id":    "toolu_edit_denied",
+				"name":  "Edit",
+				"input": map[string]interface{}{},
+			},
+		},
+	})
+	h.handleMessage(upstream.SSEMessage{
+		Type: "content_block_delta",
+		Event: map[string]interface{}{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]interface{}{
+				"type":         "input_json_delta",
+				"partial_json": `{"file_path":"/tmp/demo.txt","old_string":"hello","new_string":"world"}`,
+			},
+		},
+	})
+	h.handleMessage(upstream.SSEMessage{
+		Type: "content_block_stop",
+		Event: map[string]interface{}{
+			"type":  "content_block_stop",
+			"index": 0,
+		},
+	})
+	h.handleMessage(upstream.SSEMessage{
+		Type: "model",
+		Event: map[string]interface{}{
+			"type":         "finish",
+			"finishReason": "tool_use",
+		},
+	})
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"type":"tool_use"`) {
+		t.Fatalf("expected direct tool_use block to pass through, got: %s", body)
+	}
+	if !strings.Contains(body, `"name":"Edit"`) {
+		t.Fatalf("expected Edit tool name to pass through, got: %s", body)
+	}
+	if !strings.Contains(body, `event: message_stop`) {
+		t.Fatalf("expected message_stop after direct tool_use block, got: %s", body)
+	}
+}

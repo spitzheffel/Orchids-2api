@@ -2,6 +2,10 @@ package orchids
 
 import "orchids-api/internal/upstream"
 
+func emitOrchidsMessageStart(state *requestState, onMessage func(upstream.SSEMessage)) {
+	NewSSEWriter(state, onMessage).WriteMessageStart()
+}
+
 func emitOrchidsUsageEvent(usage orchidsFastUsage, onMessage func(upstream.SSEMessage)) {
 	NewSSEWriter(nil, onMessage).WriteUsage(usage)
 }

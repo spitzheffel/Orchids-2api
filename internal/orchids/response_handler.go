@@ -176,9 +176,7 @@ func handleOrchidsFastCompletion(
 ) bool {
 	emitOrchidsUsageEvent(msg.Response.Usage, onMessage)
 	toolCalls := extractToolCallsFromFastResponse(msg, clientTools)
-	if emitOrchidsToolCalls(toolCalls, state, onMessage) {
-		return true
-	}
+	emitOrchidsToolCalls(toolCalls, state, onMessage)
 	emitOrchidsCompletionTail(state, onMessage)
 	return true
 }
@@ -197,9 +195,7 @@ func handleOrchidsCompletionMessage(
 			}
 		}
 		toolCalls := extractToolCallsFromResponse(msg, clientTools)
-		if emitOrchidsToolCalls(toolCalls, state, onMessage) {
-			return true
-		}
+		emitOrchidsToolCalls(toolCalls, state, onMessage)
 	}
 	emitOrchidsCompletionTail(state, onMessage)
 	return true

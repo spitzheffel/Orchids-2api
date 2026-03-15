@@ -195,6 +195,10 @@ func New(cfg *config.Config) *Client {
 	return c
 }
 
+func (c *Client) OwnsFinalSSELifecycle() bool {
+	return true
+}
+
 func NewFromAccount(acc *store.Account, base *config.Config) *Client {
 	cfg := &config.Config{
 		SessionID:         acc.SessionID,

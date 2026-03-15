@@ -54,10 +54,10 @@ func TestApplyOrchidsModelStateFinishClearsOpenBlocks(t *testing.T) {
 	}
 
 	applyOrchidsModelState(state, "finish")
-	if !state.finishSent {
-		t.Fatalf("finishSent=%v want true", state.finishSent)
-	}
 	if state.textStarted || state.reasoningStarted {
 		t.Fatalf("state=%+v want closed blocks", state)
+	}
+	if state.textBlockIndex != -1 || state.reasoningBlockIndex != -1 {
+		t.Fatalf("state block indexes should reset, got %+v", state)
 	}
 }

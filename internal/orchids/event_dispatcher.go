@@ -170,8 +170,6 @@ func dispatchOrchidsDecodedEvent(
 	case EventResponseDone, EventCodingAgentEnd, EventComplete:
 		return handleOrchidsCompletionMessage(msgType, msg, state, onMessage, clientTools)
 	case EventFS:
-		client.dispatchFSOperation(msg, onMessage, conn, fsWG, workdir, rawData)
-		state.hasFSOps = true
 		return false
 	case EventReasoningChunk:
 		markOrchidsCodingAgent(state)
@@ -188,33 +186,12 @@ func dispatchOrchidsDecodedEvent(
 		emitOrchidsTextDelta(state, onMessage, msgType, extractOrchidsText(msg))
 		return false
 	case EventWriteStart, EventWriteContentStart, EventEditStart:
-		markOrchidsCodingAgent(state)
-		data, _ := msg["data"].(map[string]interface{})
-		path, _ := data["file_path"].(string)
-		beginOrchidsActiveWrite(state, path)
-		onMessage(upstream.SSEMessage{Type: msgType, Event: msg, Raw: msg, RawJSON: cloneRawJSON(rawData)})
 		return false
 	case EventWriteChunk, EventEditChunk:
-		markOrchidsCodingAgent(state)
-		data, _ := msg["data"].(map[string]interface{})
-		path, _ := data["file_path"].(string)
-		text, _ := data["text"].(string)
-		appendOrchidsActiveWrite(state, path, text)
-		onMessage(upstream.SSEMessage{Type: msgType, Event: msg, Raw: msg, RawJSON: cloneRawJSON(rawData)})
 		return false
 	case EventWriteCompleted:
-		markOrchidsCodingAgent(state)
-		data, _ := msg["data"].(map[string]interface{})
-		path, _ := data["file_path"].(string)
-		client.flushOrchidsActiveWrite(state, path, onMessage, conn, fsWG, workdir)
-		onMessage(upstream.SSEMessage{Type: msgType, Event: msg, Raw: msg, RawJSON: cloneRawJSON(rawData)})
 		return false
 	case EventEditCompleted, EventEditFileCompleted:
-		markOrchidsCodingAgent(state)
-		data, _ := msg["data"].(map[string]interface{})
-		path, _ := data["file_path"].(string)
-		clearOrchidsActiveWrite(state, path)
-		onMessage(upstream.SSEMessage{Type: msgType, Event: msg, Raw: msg, RawJSON: cloneRawJSON(rawData)})
 		return false
 	case EventModel:
 		return dispatchOrchidsModelMessage(msg, state, onMessage, clientTools)

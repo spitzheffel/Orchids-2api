@@ -208,7 +208,7 @@ func TestHandleOrchidsRawMessageMatchesDecodedResponseDone(t *testing.T) {
 	}
 }
 
-func TestHandleOrchidsResponseDoneEmitsCodeFreeMaxToolInputSequence(t *testing.T) {
+func TestHandleOrchidsResponseDoneEmitsCodeFreeMaxToolUseBlocks(t *testing.T) {
 	raw := `{"type":"response_done","response":{"usage":{"inputTokens":12,"outputTokens":34},"output":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/a.txt","content":"hello"}}]}}`
 	client := &Client{}
 	var state requestState
@@ -227,14 +227,22 @@ func TestHandleOrchidsResponseDoneEmitsCodeFreeMaxToolInputSequence(t *testing.T
 	if got := events[0].Event["type"]; got != "tokens-used" {
 		t.Fatalf("events[0].type=%v want tokens-used", got)
 	}
-	if got := events[1].Event["type"]; got != "tool-input-start" {
-		t.Fatalf("events[1].type=%v want tool-input-start", got)
+	if got := events[1].Event["type"]; got != "content_block_start" {
+		t.Fatalf("events[1].type=%v want content_block_start", got)
 	}
-	if got := events[2].Event["type"]; got != "tool-input-delta" {
-		t.Fatalf("events[2].type=%v want tool-input-delta", got)
+	contentBlock, _ := events[1].Event["content_block"].(map[string]interface{})
+	if got := contentBlock["type"]; got != "tool_use" {
+		t.Fatalf("events[1].content_block.type=%v want tool_use", got)
 	}
-	if got := events[3].Event["type"]; got != "tool-input-end" {
-		t.Fatalf("events[3].type=%v want tool-input-end", got)
+	if got := events[2].Event["type"]; got != "content_block_delta" {
+		t.Fatalf("events[2].type=%v want content_block_delta", got)
+	}
+	delta, _ := events[2].Event["delta"].(map[string]interface{})
+	if got := delta["type"]; got != "input_json_delta" {
+		t.Fatalf("events[2].delta.type=%v want input_json_delta", got)
+	}
+	if got := events[3].Event["type"]; got != "content_block_stop" {
+		t.Fatalf("events[3].type=%v want content_block_stop", got)
 	}
 	if got := events[4].Event["type"]; got != "finish" {
 		t.Fatalf("events[4].type=%v want finish", got)

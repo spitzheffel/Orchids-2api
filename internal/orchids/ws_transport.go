@@ -210,8 +210,12 @@ func (c *Client) sendRequestWS(ctx context.Context, req upstream.UpstreamRequest
 	firstReceived := false
 	receivedAnyMessage := false
 
-	var state requestState
+	state := newOrchidsRequestState(req)
 	var fsWG sync.WaitGroup
+
+	if state.stream {
+		emitOrchidsMessageStart(&state, onMessage)
+	}
 
 	// Start Keep-Alive Ping Loop
 	go func() {

@@ -27,8 +27,9 @@ func finalizeOrchidsTransport(
 	}
 
 	if !state.finishSent {
-		onMessage(upstream.SSEMessage{Type: "model", Event: map[string]interface{}{"type": "finish", "finishReason": orchidsFinishReason(state)}})
+		state.finishReason = orchidsFinishReason(state)
+		emitOrchidsCompletionTail(state, onMessage)
 	}
 
-	return waitOrchidsFSOperations(ctx, state, fsWG, transport)
+	return nil
 }

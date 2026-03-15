@@ -1,5 +1,7 @@
 package orchids
 
+import "strings"
+
 type orchidsCompletionState struct {
 	emitTextEnd         bool
 	emitReasoningEnd    bool
@@ -85,9 +87,12 @@ func recordOrchidsToolCalls(state *requestState, count int) bool {
 }
 
 func snapshotOrchidsCompletion(state *requestState) orchidsCompletionState {
-	finishReason := "stop"
-	if state.sawToolCall {
-		finishReason = "tool-calls"
+	finishReason := strings.TrimSpace(state.finishReason)
+	if finishReason == "" {
+		finishReason = "stop"
+		if state.sawToolCall {
+			finishReason = "tool-calls"
+		}
 	}
 
 	snapshot := orchidsCompletionState{
@@ -103,6 +108,7 @@ func snapshotOrchidsCompletion(state *requestState) orchidsCompletionState {
 	state.reasoningStarted = false
 	state.textBlockIndex = -1
 	state.reasoningBlockIndex = -1
+	state.finishReason = finishReason
 	if snapshot.emitFinish {
 		state.finishSent = true
 	}
@@ -133,7 +139,6 @@ func applyOrchidsModelState(state *requestState, eventType string) {
 	case "tool-call":
 		state.sawToolCall = true
 	case "finish":
-		state.finishSent = true
 		state.textStarted = false
 		state.reasoningStarted = false
 		state.textBlockIndex = -1

@@ -20,6 +20,14 @@ func NewSSEWriter(state *requestState, onMessage func(upstream.SSEMessage)) *SSE
 	return &SSEWriter{state: state, onMessage: onMessage}
 }
 
+func (w *SSEWriter) WriteMessageStart() {
+	if w == nil || w.state == nil || !w.state.stream || w.state.messageStarted {
+		return
+	}
+	w.state.messageStarted = true
+	w.onMessage(orchidsMessageStartEvent(w.state.modelName))
+}
+
 func (w *SSEWriter) WriteUsage(usage orchidsFastUsage) {
 	if w == nil {
 		return
@@ -47,6 +55,9 @@ func (w *SSEWriter) WriteUsageMap(usage map[string]interface{}) {
 	normalized := normalizeOrchidsUsage(usage)
 	if len(normalized) == 0 {
 		return
+	}
+	if w.state != nil {
+		recordOrchidsUsage(w.state, normalized)
 	}
 
 	event := map[string]interface{}{"type": "tokens-used"}
@@ -77,6 +88,11 @@ func (w *SSEWriter) WriteMessageEnd() {
 		w.onMessage(orchidsContentBlockStopEvent(snapshot.reasoningBlockIndex))
 	}
 	if snapshot.emitFinish {
+		if w.state.stream {
+			w.onMessage(orchidsMessageDeltaEvent(snapshot.finishReason, w.state.outputTokens))
+			w.onMessage(orchidsMessageStopEvent())
+			return
+		}
 		w.onMessage(upstream.SSEMessage{Type: "model", Event: map[string]interface{}{"type": "finish", "finishReason": snapshot.finishReason}})
 	}
 }
@@ -123,10 +139,6 @@ func (w *SSEWriter) WriteToolCalls(toolCalls []orchidsToolCall) bool {
 	if !wroteAny {
 		return false
 	}
-	if !w.state.finishSent {
-		w.onMessage(upstream.SSEMessage{Type: "model", Event: map[string]interface{}{"finishReason": "tool-calls", "type": "finish"}})
-		w.state.finishSent = true
-	}
 	return true
 }
 
@@ -141,33 +153,24 @@ func (w *SSEWriter) WriteToolUseBlock(call orchidsToolCall) bool {
 		return false
 	}
 
-	w.onMessage(upstream.SSEMessage{
-		Type: "model",
-		Event: map[string]interface{}{
-			"type":     "tool-input-start",
-			"id":       toolID,
-			"toolName": toolName,
-		},
-	})
-
-	if input := strings.TrimSpace(call.input); input != "" {
-		w.onMessage(upstream.SSEMessage{
-			Type: "model",
-			Event: map[string]interface{}{
-				"type":  "tool-input-delta",
-				"id":    toolID,
-				"delta": input,
-			},
-		})
+	index := 0
+	if w.state != nil {
+		if textIndex := orchidsActiveTextBlockIndex(w.state); textIndex >= 0 && endOrchidsText(w.state) {
+			w.onMessage(orchidsContentBlockStopEvent(textIndex))
+		}
+		if reasoningIndex := orchidsActiveReasoningBlockIndex(w.state); reasoningIndex >= 0 && endOrchidsReasoning(w.state) {
+			w.onMessage(orchidsContentBlockStopEvent(reasoningIndex))
+		}
+		index = nextOrchidsBlockIndex(w.state)
 	}
 
-	w.onMessage(upstream.SSEMessage{
-		Type: "model",
-		Event: map[string]interface{}{
-			"type": "tool-input-end",
-			"id":   toolID,
-		},
-	})
+	w.onMessage(orchidsContentBlockStartToolUseEvent(index, toolID, toolName))
+
+	if input := strings.TrimSpace(call.input); input != "" {
+		w.onMessage(orchidsContentBlockDeltaInputJSONEvent(index, input))
+	}
+
+	w.onMessage(orchidsContentBlockStopEvent(index))
 
 	return true
 }
@@ -220,6 +223,66 @@ func orchidsContentBlockStartTextEvent(index int) upstream.SSEMessage {
 	}
 }
 
+func orchidsMessageStartEvent(model string) upstream.SSEMessage {
+	return upstream.SSEMessage{
+		Type: "message_start",
+		Event: map[string]interface{}{
+			"type": "message_start",
+			"message": map[string]interface{}{
+				"id":      "",
+				"type":    "message",
+				"role":    "assistant",
+				"model":   model,
+				"content": []interface{}{},
+				"usage": map[string]interface{}{
+					"input_tokens":  0,
+					"output_tokens": 0,
+				},
+			},
+		},
+	}
+}
+
+func orchidsMessageDeltaEvent(finishReason string, outputTokens int) upstream.SSEMessage {
+	return upstream.SSEMessage{
+		Type: "message_delta",
+		Event: map[string]interface{}{
+			"type": "message_delta",
+			"delta": map[string]interface{}{
+				"stop_reason": orchidsFinalStopReason(finishReason),
+			},
+			"usage": map[string]interface{}{
+				"output_tokens": outputTokens,
+			},
+		},
+	}
+}
+
+func orchidsMessageStopEvent() upstream.SSEMessage {
+	return upstream.SSEMessage{
+		Type: "message_stop",
+		Event: map[string]interface{}{
+			"type": "message_stop",
+		},
+	}
+}
+
+func orchidsContentBlockStartToolUseEvent(index int, id, name string) upstream.SSEMessage {
+	return upstream.SSEMessage{
+		Type: "content_block_start",
+		Event: map[string]interface{}{
+			"type":  "content_block_start",
+			"index": index,
+			"content_block": map[string]interface{}{
+				"type":  "tool_use",
+				"id":    id,
+				"name":  name,
+				"input": map[string]interface{}{},
+			},
+		},
+	}
+}
+
 func orchidsContentBlockStartThinkingEvent(index int) upstream.SSEMessage {
 	return upstream.SSEMessage{
 		Type: "content_block_start",
@@ -230,6 +293,20 @@ func orchidsContentBlockStartThinkingEvent(index int) upstream.SSEMessage {
 				"type":      "thinking",
 				"thinking":  "",
 				"signature": "",
+			},
+		},
+	}
+}
+
+func orchidsContentBlockDeltaInputJSONEvent(index int, partialJSON string) upstream.SSEMessage {
+	return upstream.SSEMessage{
+		Type: "content_block_delta",
+		Event: map[string]interface{}{
+			"type":  "content_block_delta",
+			"index": index,
+			"delta": map[string]interface{}{
+				"type":         "input_json_delta",
+				"partial_json": partialJSON,
 			},
 		},
 	}
@@ -271,4 +348,39 @@ func orchidsContentBlockStopEvent(index int) upstream.SSEMessage {
 			"index": index,
 		},
 	}
+}
+
+func orchidsFinalStopReason(finishReason string) string {
+	switch strings.TrimSpace(finishReason) {
+	case "tool-calls", "tool_use":
+		return "tool_use"
+	default:
+		return "end_turn"
+	}
+}
+
+func recordOrchidsUsage(state *requestState, usage map[string]interface{}) {
+	if state == nil || len(usage) == 0 {
+		return
+	}
+	if value, ok := orchidsUsageInt(usage["inputTokens"]); ok {
+		state.inputTokens = value
+	}
+	if value, ok := orchidsUsageInt(usage["outputTokens"]); ok {
+		state.outputTokens = value
+	}
+}
+
+func orchidsUsageInt(value interface{}) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	}
+	return 0, false
 }

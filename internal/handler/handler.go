@@ -57,6 +57,10 @@ type UpstreamPayloadClient interface {
 	SendRequestWithPayload(ctx context.Context, req upstream.UpstreamRequest, onMessage func(upstream.SSEMessage), logger *debug.Logger) error
 }
 
+type FinalSSELifecycleOwner interface {
+	OwnsFinalSSELifecycle() bool
+}
+
 type ClaudeRequest struct {
 	Model          string                 `json:"model"`
 	Messages       []prompt.Message       `json:"messages"`
@@ -153,6 +157,11 @@ func (h *Handler) computeRequestHash(r *http.Request, body []byte) string {
 	hasher.Write([]byte{0})
 	hasher.Write(body)
 	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func ownsFinalSSELifecycle(client UpstreamClient) bool {
+	owner, ok := client.(FinalSSELifecycleOwner)
+	return ok && owner.OwnsFinalSSELifecycle()
 }
 
 func (h *Handler) computeSemanticRequestHash(r *http.Request, req ClaudeRequest) string {
@@ -635,8 +644,12 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sh.release()
 
-	// 发送 message_start
-	sh.writeSSEMessageStart(req.Model, inputTokens, 0)
+	orchidsOwnsFinalSSE := isOrchidsProtocol && isStream && ownsFinalSSELifecycle(apiClient)
+
+	// Real Orchids client owns final SSE lifecycle like CodeFreeMax, including message_start.
+	if !orchidsOwnsFinalSSE {
+		sh.writeSSEMessageStart(req.Model, inputTokens, 0)
+	}
 
 	slog.Debug("New request received")
 
@@ -693,6 +706,7 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 			ChatHistory:   chatHistory,
 			Workdir:       effectiveWorkdir,
 			Model:         mappedModel,
+			Stream:        req.Stream,
 			Messages:      payloadMessages,
 			System:        payloadSystem,
 			Tools:         effectiveTools,

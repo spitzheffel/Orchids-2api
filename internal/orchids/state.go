@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/goccy/go-json"
+
+	"orchids-api/internal/upstream"
 )
 
 type requestState struct {
@@ -18,7 +20,13 @@ type requestState struct {
 	finishSent          bool
 	sawToolCall         bool
 	hasFSOps            bool
+	stream              bool
 	responseStarted     bool
+	messageStarted      bool
+	modelName           string
+	finishReason        string
+	inputTokens         int
+	outputTokens        int
 	suppressStarts      bool
 	activeWrites        map[string]*fileWriterState
 	errorMsg            string
@@ -34,4 +42,17 @@ func cloneRawJSON(data []byte) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(data)
+}
+
+func newOrchidsRequestState(req upstream.UpstreamRequest) requestState {
+	modelName := strings.TrimSpace(req.Model)
+	if modelName == "" {
+		modelName = normalizeOrchidsAgentModel(req.Model)
+	}
+	return requestState{
+		stream:              req.Stream,
+		modelName:           modelName,
+		textBlockIndex:      -1,
+		reasoningBlockIndex: -1,
+	}
 }
