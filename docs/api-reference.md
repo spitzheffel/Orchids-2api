@@ -70,6 +70,49 @@
 
 ## 4. 常用请求示例
 
+### 4.0 账号字段与 Token 格式（`POST /api/accounts`）
+
+请求体通用字段：
+
+- `account_type`：`orchids` / `warp` / `grok`（固定小写）
+- `agent_mode`：可选；不填时后端按账号类型兜底（例如 Orchids 默认 `claude-sonnet-4-5`，Warp 默认 `auto`，Grok 默认 `grok-3`）
+- `enabled`、`weight`：可选
+
+按账号类型的凭证字段：
+
+1. **Orchids**
+   - 使用 `client_cookie`
+   - 支持两种格式：
+     - 完整 Cookie 串（推荐，包含 `__client`，可带 `__session`）
+     - 纯 `__client` JWT / token
+   - 示例：
+     ```json
+     {"account_type":"orchids","client_cookie":"__client=xxx; __session=yyy"}
+     ```
+     ```json
+     {"account_type":"orchids","client_cookie":"eyJ..."}
+     ```
+
+2. **Warp**
+   - 推荐使用 `refresh_token`（历史导入场景下若传 `client_cookie`，后端会兼容转为 `refresh_token`）
+   - 示例：
+     ```json
+     {"account_type":"warp","refresh_token":"warp_refresh_token_xxx"}
+     ```
+
+3. **Grok**
+   - 统一写入 `client_cookie`
+   - 支持：
+     - 纯 `sso` token
+     - 包含 `sso=` 的 Cookie 片段（后端会自动提取 `sso` 值）
+   - 示例：
+     ```json
+     {"account_type":"grok","client_cookie":"sso=xxx; Path=/; Secure"}
+     ```
+     ```json
+     {"account_type":"grok","client_cookie":"xxx"}
+     ```
+
 ### 4.1 Claude Messages
 
 ```bash
